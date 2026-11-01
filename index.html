@@ -303,20 +303,26 @@ textarea.in{min-height:96px;font-family:ui-monospace,Menlo,monospace;font-size:1
         <div class="seg2" role="group" aria-label="ประเภทรายการ">
           <button type="button" class="exp" data-act="ftype" data-v="expense" aria-pressed="true">รายจ่าย</button>
           <button type="button" class="inc" data-act="ftype" data-v="income" aria-pressed="false">รายรับ</button>
+          <button type="button" class="xfer" data-act="ftype" data-v="transfer" aria-pressed="false">โอนย้าย</button>
         </div>
       </div>
       <form id="txForm" class="form" novalidate>
         <label class="fld"><span>จำนวนเงิน</span>
           <div class="amt-wrap"><b id="curSym">฿</b><input id="fAmt" inputmode="decimal" autocomplete="off" placeholder="0.00" aria-label="จำนวนเงิน"></div>
         </label>
-        <div class="fld"><span id="fCatLabel">หมวดหมู่</span>
+        <div class="fld" id="catFld"><span id="fCatLabel">หมวดหมู่</span>
           <div id="fCats" class="chips" role="group" aria-labelledby="fCatLabel"></div>
           <div id="newCatBox"></div>
         </div>
         <div class="row2">
           <label class="fld"><span>วันที่</span><input class="in" type="date" id="fDate"></label>
-          <label class="fld"><span>ช่องทางชำระเงิน</span><select class="in" id="fMethod"></select></label>
+          <label class="fld" id="methFld"><span>ช่องทางชำระเงิน</span><select class="in" id="fMethod"></select></label>
         </div>
+        <div class="row2" id="xferFlds" hidden>
+          <label class="fld"><span>โอนจากบัญชี</span><select class="in" id="fFrom"></select></label>
+          <label class="fld"><span>ไปที่บัญชี</span><select class="in" id="fTo"></select></label>
+        </div>
+        <p class="small muted" id="xHint" hidden>การโอนย้ายไม่นับเป็นรายรับหรือรายจ่าย เป็นแค่การย้ายเงินจากบัญชีหนึ่งไปอีกบัญชี เช่น ถอนเงินสด หรือเติมทรูวอเลท</p>
         <label class="fld"><span>โน้ต (ไม่บังคับ)</span><input class="in" id="fNote" maxlength="80" placeholder="เช่น ข้าวมันไก่ กาแฟ ค่าเช่าห้อง" autocomplete="off"></label>
         <p class="err" id="fErr" role="alert" hidden></p>
         <div class="form-actions">
@@ -331,7 +337,7 @@ textarea.in{min-height:96px;font-family:ui-monospace,Menlo,monospace;font-size:1
       <div class="filters">
         <div class="frow">
           <select class="in" id="rfMonth" aria-label="กรองตามเดือน"></select>
-          <select class="in" id="rfType" aria-label="กรองตามประเภท"><option value="all">ทุกประเภท</option><option value="expense">รายจ่าย</option><option value="income">รายรับ</option></select>
+          <select class="in" id="rfType" aria-label="กรองตามประเภท"><option value="all">ทุกประเภท</option><option value="expense">รายจ่าย</option><option value="income">รายรับ</option><option value="transfer">โอนย้าย</option></select>
           <select class="in" id="rfCat" aria-label="กรองตามหมวด"></select>
           <select class="in" id="rfMethod" aria-label="กรองตามช่องทาง"></select>
         </div>
@@ -552,6 +558,10 @@ function demoBanner(){
   return h;
 }
 function txRow(t){
+  if(t.type==='transfer'){
+    var sub2=[mName(t.from)+' → '+mName(t.to),t.note].filter(Boolean).join(' · ');
+    return '<span class="ico" style="--c:var(--c9)">🔁</span><span class="tx-main"><b>โอนย้าย</b><small>'+esc(sub2)+'</small></span><span class="tx-amt num" style="color:var(--fg2)">'+money(t.amt)+'</span>';
+  }
   var c=catOf(t.cat), m=methOf(t.m), sub=[t.note,m&&m.name].filter(Boolean).join(' · ');
   return '<span class="ico" style="--c:'+cv(c)+'">'+esc(c.icon)+'</span><span class="tx-main"><b>'+esc(c.name)+'</b><small>'+esc(sub||dayLabel(t.date))+'</small></span>'+
     '<span class="tx-amt num'+(t.type==='income'?' pos':'')+'">'+(t.type==='income'?'+':'−')+money(t.amt)+'</span>';
@@ -660,6 +670,8 @@ function methodOptions(selected,withAll,withBal){
 function renderForm(){
   $('#curSym').textContent=S.set.cur;
   $$('[data-act="ftype"]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===form.type))});
+  var isX=form.type==='transfer';
+  $('#catFld').hidden=isX;$('#methFld').hidden=isX;$('#xferFlds').hidden=!isX;$('#xHint').hidden=!isX;
   var cats=S.cats.filter(function(c){return c.type===form.type});
   if(!cats.some(function(c){return c.id===form.cat})) form.cat=cats.length?cats[0].id:null;
   $('#fCats').innerHTML=cats.map(function(c){return '<button type="button" class="chip" data-act="fcat" data-v="'+esc(c.id)+'" aria-pressed="'+(c.id===form.cat)+'"><span class="ico" style="--c:'+cv(c)+';width:28px;height:28px;font-size:15px;border-radius:9px">'+esc(c.icon)+'</span><span>'+esc(c.name)+'</span></button>'}).join('')+
@@ -668,8 +680,12 @@ function renderForm(){
   if(form.newCat){var ni=$('#ncName');if(ni)ni.focus()}
   var cur=$('#fMethod').value;
   $('#fMethod').innerHTML=methodOptions(form.editId?(S.tx.find(function(t){return t.id===form.editId})||{}).m:(cur||'m-cash'),false,true);
-  $('#fTitle').textContent=form.editId?'แก้ไขรายการ':'เพิ่มรายการใหม่';
-  $('#fSave').textContent=form.editId?'บันทึกการแก้ไข':'บันทึกรายการ';
+  var cf=$('#fFrom').value,ct=$('#fTo').value,ed=isX&&form.editId?S.xfers.find(function(x){return x.id===form.editId}):null;
+  var f0=ed?ed.from:(methOf(cf)?cf:(S.methods[0]||{}).id);
+  var t0=ed?ed.to:((methOf(ct)&&ct!==f0)?ct:(S.methods.find(function(m){return m.id!==f0})||{}).id);
+  $('#fFrom').innerHTML=acctOpts(f0);$('#fTo').innerHTML=acctOpts(t0);
+  $('#fTitle').textContent=isX?(form.editId?'แก้ไขการโอน':'โอนย้ายเงินระหว่างบัญชี'):(form.editId?'แก้ไขรายการ':'เพิ่มรายการใหม่');
+  $('#fSave').textContent=form.editId?'บันทึกการแก้ไข':(isX?'บันทึกการโอน':'บันทึกรายการ');
   $('#fCancel').hidden=!form.editId;
 }
 function renderFilters(){
@@ -684,21 +700,32 @@ function renderFilters(){
   $('#rfType').value=rf.type;
 }
 function filteredTx(){
-  return S.tx.filter(function(t){
+  var out=S.tx.filter(function(t){
+    if(rf.type==='transfer')return false;
     if(rf.month!=='all'&&t.date.slice(0,7)!==rf.month)return false;
     if(rf.type!=='all'&&t.type!==rf.type)return false;
     if(rf.cat!=='all'&&t.cat!==rf.cat)return false;
     if(rf.method==='none'){if(t.m)return false}else if(rf.method!=='all'&&t.m!==rf.method)return false;
     if(rf.q){var q=rf.q.toLowerCase();if(String(t.note||'').toLowerCase().indexOf(q)<0&&catOf(t.cat).name.toLowerCase().indexOf(q)<0)return false}
     return true;
-  }).sort(cmpTx);
+  });
+  if(rf.cat==='all'&&(rf.type==='all'||rf.type==='transfer')){
+    S.xfers.forEach(function(x){
+      if(rf.month!=='all'&&x.date.slice(0,7)!==rf.month)return;
+      if(rf.method==='none')return;
+      if(rf.method!=='all'&&x.from!==rf.method&&x.to!==rf.method)return;
+      if(rf.q){var hay=(String(x.note||'')+' โอนย้าย '+mName(x.from)+' '+mName(x.to)).toLowerCase();if(hay.indexOf(rf.q.toLowerCase())<0)return}
+      out.push(Object.assign({},x,{type:'transfer'}));
+    });
+  }
+  return out.sort(cmpTx);
 }
 function renderTxList(){
   var all=filteredTx(), shown=all.slice(0,listLimit);
   var inc=sum(all.filter(function(t){return t.type==='income'})), exp=sum(all.filter(function(t){return t.type==='expense'}));
   $('#rfSummary').textContent=all.length?all.length+' รายการ · รับ '+money0(inc)+' · จ่าย '+money0(exp):'';
   if(!all.length){
-    $('#txList').innerHTML='<div class="empty"><b>'+(S.tx.length?'ไม่พบรายการที่ตรงกับตัวกรอง':'ยังไม่มีรายการ')+'</b><span>'+(S.tx.length?'ลองเปลี่ยนเดือนหรือล้างคำค้นหา':'กรอกฟอร์มด้านบนเพื่อบันทึกรายการแรก')+'</span></div>';
+    $('#txList').innerHTML='<div class="empty"><b>'+((S.tx.length||S.xfers.length)?'ไม่พบรายการที่ตรงกับตัวกรอง':'ยังไม่มีรายการ')+'</b><span>'+((S.tx.length||S.xfers.length)?'ลองเปลี่ยนเดือนหรือล้างคำค้นหา':'กรอกฟอร์มด้านบนเพื่อบันทึกรายการแรก')+'</span></div>';
     return;
   }
   var h='<ul class="txs" style="margin-top:12px">',last='';
@@ -730,6 +757,16 @@ function submitForm(e){
   e.preventDefault();
   var amt=Math.round(parseFloat(String($('#fAmt').value).replace(/,/g,''))*100)/100;
   if(!(amt>0)){formErr('กรอกจำนวนเงินที่มากกว่า 0');$('#fAmt').focus();return}
+  if(form.type==='transfer'){
+    var fr=$('#fFrom').value,to=$('#fTo').value,d2=$('#fDate').value;
+    if(!fr||!to||fr===to){formErr('เลือกบัญชีต้นทางและปลายทางคนละบัญชี');return}
+    if(!d2){formErr('เลือกวันที่');return}
+    $('#fErr').hidden=true;
+    var xr={from:fr,to:to,amt:amt,date:d2,note:$('#fNote').value.trim()};
+    if(form.editId){var xo=S.xfers.find(function(x){return x.id===form.editId});if(xo)Object.assign(xo,xr);toast('แก้ไขการโอนแล้ว');form.editId=null;openTx=null;confirmTx=null;$('#fAmt').value='';$('#fNote').value='';$('#fDate').value=todayISO}
+    else{xr.id=uid();xr.ts=Date.now();S.xfers.push(xr);toast('โอน '+money(amt)+' จาก '+mName(fr)+' ไป '+mName(to)+' แล้ว');$('#fAmt').value='';$('#fNote').value='';$('#fAmt').focus()}
+    commit();return;
+  }
   if(!form.cat){formErr('เลือกหมวดหมู่ก่อนบันทึก');return}
   var d=$('#fDate').value;if(!d){formErr('เลือกวันที่');return}
   $('#fErr').hidden=true;
@@ -1031,7 +1068,11 @@ var A={
     if(!n){toast('ใส่ชื่อบัญชีก่อน');$('#naName').focus();return}
     S.methods.push({id:'m-'+uid(),name:n,open:isNaN(v)?0:Math.round(v*100)/100,credit:false});commit();toast('เพิ่มบัญชี “'+n+'” แล้ว');
   },
-  ftype:function(t){form.type=t.dataset.v;form.cat=null;form.newCat=false;renderForm()},
+  ftype:function(t){
+    var v=t.dataset.v;
+    if(form.editId&&((v==='transfer')!==(form.type==='transfer'))){form.editId=null;$('#fAmt').value='';$('#fNote').value='';$('#fDate').value=todayISO}
+    form.type=v;form.cat=null;form.newCat=false;$('#fErr').hidden=true;renderForm();
+  },
   fcat:function(t){form.cat=t.dataset.v;renderForm()},
   newcat:function(){form.newCat=!form.newCat;renderForm()},
   ncsave:function(){
@@ -1045,14 +1086,20 @@ var A={
   fcancel:function(){form.editId=null;resetForm()},
   txopen:function(t){openTx=openTx===t.dataset.id?null:t.dataset.id;confirmTx=null;renderTxList()},
   txedit:function(t){
-    var x=S.tx.find(function(y){return y.id===t.dataset.id});if(!x)return;
+    var x=S.tx.find(function(y){return y.id===t.dataset.id});
+    if(!x){
+      var xf=S.xfers.find(function(y){return y.id===t.dataset.id});if(!xf)return;
+      form.editId=xf.id;form.type='transfer';form.cat=null;form.newCat=false;renderForm();
+      $('#fAmt').value=xf.amt;$('#fDate').value=xf.date;$('#fNote').value=xf.note||'';
+      $('#formCard').scrollIntoView({behavior:'smooth',block:'start'});$('#fAmt').focus();return;
+    }
     form.editId=x.id;form.type=x.type;form.cat=x.cat;form.newCat=false;
     renderForm();$('#fAmt').value=x.amt;$('#fDate').value=x.date;$('#fNote').value=x.note||'';$('#fMethod').value=x.m||'';
     $('#formCard').scrollIntoView({behavior:'smooth',block:'start'});$('#fAmt').focus();
   },
   txdel:function(t){confirmTx=t.dataset.id;renderTxList()},
   txdelno:function(){confirmTx=null;renderTxList()},
-  txdelyes:function(t){S.tx=S.tx.filter(function(x){return x.id!==t.dataset.id});if(form.editId===t.dataset.id){form.editId=null}openTx=null;confirmTx=null;commit();toast('ลบรายการแล้ว')},
+  txdelyes:function(t){S.tx=S.tx.filter(function(x){return x.id!==t.dataset.id});S.xfers=S.xfers.filter(function(x){return x.id!==t.dataset.id});if(form.editId===t.dataset.id){form.editId=null}openTx=null;confirmTx=null;commit();toast('ลบรายการแล้ว')},
   more:function(){listLimit+=60;renderTxList()},
   srange:function(t){statsRange=+t.dataset.v;render()},
   stable:function(){statsTable=!statsTable;render()},
