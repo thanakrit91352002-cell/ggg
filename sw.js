@@ -1,6 +1,6 @@
 // Service worker: ให้แอพเปิดได้แม้ไม่มีอินเทอร์เน็ต
 // ถ้าแก้ไฟล์ในโปรเจกต์ ให้เปลี่ยนเลขเวอร์ชันด้านล่างเพื่อให้เครื่องที่ติดตั้งไว้โหลดไฟล์ใหม่
-const CACHE = 'ledger-v1';
+const CACHE = 'ledger-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
