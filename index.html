@@ -860,8 +860,17 @@ function catSummary(type,title){
   return h+'</section>';
 }
 function topList(type,title){
-  var big=inMonth(M,type).slice().sort(function(a,b){return b.amt-a.amt}).slice(0,5);
-  return '<section class="card"><div class="card-h"><h2>'+title+'</h2></div>'+(big.length?'<ul class="txs">'+big.map(function(t){return '<li class="tx"><div class="tx-btn" style="cursor:default">'+txRow(t)+'</div></li>'}).join('')+'</ul>':'<p class="muted">ยังไม่มีข้อมูล</p>')+'</section>';
+  var g={};
+  inMonth(M,type).forEach(function(t){
+    var note=String(t.note||'').trim(), k=t.cat+'|'+note.toLowerCase();
+    var o=g[k]||(g[k]={cat:catOf(t.cat),note:note,total:0,count:0});o.total+=t.amt;o.count++;
+  });
+  var big=Object.keys(g).map(function(k){return g[k]}).sort(function(a,b){return b.total-a.total}).slice(0,5);
+  var pos=type==='income';
+  return '<section class="card"><div class="card-h"><h2>'+title+'</h2></div>'+(big.length?'<ul class="txs">'+big.map(function(x){
+    var sub=[x.note,x.count>1?x.count+' ครั้ง':''].filter(Boolean).join(' · ');
+    return '<li class="tx"><div class="tx-btn" style="cursor:default"><span class="ico" style="--c:'+cv(x.cat)+'">'+esc(x.cat.icon)+'</span><span class="tx-main"><b>'+esc(x.cat.name)+'</b><small>'+esc(sub||'ครั้งเดียว')+'</small></span><span class="tx-amt num'+(pos?' pos':'')+'">'+(pos?'+':'−')+money(x.total)+'</span></div></li>';
+  }).join('')+'</ul>':'<p class="muted">ยังไม่มีข้อมูล</p>')+'</section>';
 }
 function renderStats(){
   var keys=[];for(var i=statsRange-1;i>=0;i--)keys.push(addMonths(M,-i));
